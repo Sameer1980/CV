@@ -1,0 +1,11 @@
+Hi my name is Samir Banerjee. I have got a total 12 years of experience in IT.
+I have an experience of 4 + years working in Python and PySpark. I have an experience of 8 + years working with SQL on relational databases and Enterprise 
+Datawarehouses.
+I have worked on billable projects where I created end-to-end ETL pipelines using Python.
+I have worked on projects involving relational databases and Enterprise Datawarehouses where I joined Facts with Dimension tables, used lookup queries , aggregations, group and window functions , data partitioning , Stored Procedures, query optimization and database tuning, all using SQL. 
+I have worked on billable projects where I manipulated large datasets using PySpark.
+
+My core skillsets are SQL, Python and PySpark . I also have a good understanding on Azure Databricks and Synapse. 
+
+
+ 
