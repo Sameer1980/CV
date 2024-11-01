@@ -1,0 +1,344 @@
+Raw(Bronze) layer  --> ADLS Gen2.
+Silver layer --> Azure Databricks.
+Gold layer --> Azure Synapse Analytics. 
+---------------------------------------------------------------------------------------------------------------------------------------------------
+
+---------------------------------------------------------------------------------------------------------------------------------------------------
+Data from the multiple source systems(Upstream applications) got ingested into the ADLS Gen2 storage using Azure DataFactory and Streaming Analytics pipelines from where it moved to the Azure Databricks Delta tables. Data was stored in the ADLS Gen2 using date and timestamp hierarchical namespace. Data mostly in CSV and Parquet format.
+-----------------------------------------------------------------------------------------------------------------------------------------------------
+-----------------------------------------------------------------------------------------------------------------------------------------------------
+Two pipelines from ADLS Gen2 to Azure Databricks -- One for full load(month end) and another one for incremental, partial load(daily).
+A databricks pipeline then carried this cleansed and processed data to the dedicated SQL Pool tables in Azure Synapse .
+Another pipeline carried raw data directly from ADLS Gen2 to the Spark SQL Pool tables(Global Managed Tables) in Azure Synapse.
+This data got joined with the processed data (processed earlier by ADB) on keys and got stored and got modelled and presented in PowerBI.
+Data is also ingested directly into Azure Synapse Analytics Serverless and Spark SQL Pools from ADLS Gen2 using Polybase.
+This type of raw data(bronze) is mainly used for data modelling and dashboard presentation of Near Real Time data in PowerBI.
+This raw data(bronze) is also used for joining and lookup operations with the already cleansed data from the Azure Databricks.
+-----------------------------------------------------------------------------------------------------------------------------------------------------
+-----------------------------------------------------------------------------------------------------------------------------------------------------
+From ADLS Gen2 to Azure DataBricks full load as well as partial load was done.
+From Azure Databricks to the Azure Synapse Dedicated SQL Pool(relational tables with columnar storage.It leverages Azure Storage.Once data is stored, you can run analytics at massive scale. Compared to traditional database systems, analysis queries finish in seconds instead of minutes, or hours instead of days.) full load as well as incremental load was done using the two pipelines(one for full and another for partial load using Spark Connector for  SQL Server and Azure SQL Database using Microsoft Entra ID authentication).The Partial load pipeline executed daily while the full load executed only once during the month-end. 
+Azure Databricks - For Data cleansing and In order to reduce time, IO and ensure data accuracy for full load and delta load, certain operations such as out-of-range data(flag checking for greater than > 5 years data),correction of misaligned data , truncate and trimming of outliers, special characters , white spaces , string formatting, removal of duplicates, PII data encryption was done using both SQL and Python. We also entertained client requests like converting generic timezones to Australia/ NewZealand timezone as also converting the date/ timestamp format as per client request.
+-----------------------------------------------------------------------------------------------------------------------------------------------------
+-----------------------------------------------------------------------------------------------------------------------------------------------------
+Before you begin- 
+1) Create a user for loading data - 
+.................................................
+Connect as the server admin so you can create logins and users. Use these steps to create a login and user called LoaderRC20. Then assign the user to the staticrc20 resource class.
+
+a)In SSMS, right-select master to show a dropdown menu, and choose New Query. A new query window opens.
+
+b)In the query window, enter these T-SQL commands to create a login and user named LoaderRC20, substituting your own strong password.
+SQL : CREATE LOGIN LoaderRC20 WITH PASSWORD = '<strong password here>';
+CREATE USER LoaderRC20 FOR LOGIN LoaderRC20;
+
+c) Select Execute.
+d)Right-click mySampleDataWarehouse, and choose New Query. A new query Window opens.
+e)Enter the following T-SQL commands to create a database user named LoaderRC20 for the LoaderRC20 login. The second line grants the new user CONTROL permissions on the new data warehouse. These permissions are similar to making the user the owner of the database. The third line adds the new user as a member of the staticrc20 resource class.
+SQL : CREATE USER LoaderRC20 FOR LOGIN LoaderRC20;
+GRANT CONTROL ON DATABASE::[mySampleDataWarehouse] to LoaderRC20;
+EXEC sp_addrolemember 'staticrc20', 'LoaderRC20';
+
+d)Select Execute.
+
+2) Connect to the server as the loading user -
+   .......................................................
+a)The first step toward loading data is to login as LoaderRC20.
+
+b)In Object Explorer, select the Connect dropdown menu and select Database Engine. The Connect to Server dialog box appears.
+
+c)Enter the fully qualified server name, and enter LoaderRC20 as the Login. Enter your password for LoaderRC20.
+
+d)Select Connect.
+
+e)When your connection is ready, you'll see two server connections in Object Explorer. One connection as ServerAdmin and one connection as LoaderRC20.
+
+3) Create tables for the sample data-
+................................................
+You're ready to begin the process of loading data into your new data warehouse. This part of the tutorial shows you how to use the COPY statement to load the New York City taxi cab dataset from an Azure Storage blob.
+a)In the previous section, you logged into your data warehouse as LoaderRC20. In SSMS, right-click your LoaderRC20 connection and select New Query. A new query window appears.
+
+b)Compare your query window to the previous image. Verify your new query window is running as LoaderRC20 and performing queries on your MySampleDataWarehouse database. Use this query window to perform all of the loading steps.
+
+c)Run the following T-SQL statements to create the tables:
+CREATE TABLE [dbo].[Date]
+(
+    [DateID] int NOT NULL,
+    [Date] datetime NULL,
+    [DateBKey] char(10) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+    [DayOfMonth] varchar(2) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+    [DaySuffix] varchar(4) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+    [DayName] varchar(9) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+    [DayOfWeek] char(1) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+    [DayOfWeekInMonth] varchar(2) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+    [DayOfWeekInYear] varchar(2) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+    [DayOfQuarter] varchar(3) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+    [DayOfYear] varchar(3) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+    [WeekOfMonth] varchar(1) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+    [WeekOfQuarter] varchar(2) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+    [WeekOfYear] varchar(2) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+    [Month] varchar(2) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+    [MonthName] varchar(9) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+    [MonthOfQuarter] varchar(2) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+    [Quarter] char(1) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+    [QuarterName] varchar(9) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+    [Year] char(4) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+    [YearName] char(7) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+    [MonthYear] char(10) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+    [MMYYYY] char(6) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+    [FirstDayOfMonth] date NULL,
+    [LastDayOfMonth] date NULL,
+    [FirstDayOfQuarter] date NULL,
+    [LastDayOfQuarter] date NULL,
+    [FirstDayOfYear] date NULL,
+    [LastDayOfYear] date NULL,
+    [IsHolidayUSA] bit NULL,
+    [IsWeekday] bit NULL,
+    [HolidayUSA] varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL
+)
+WITH
+(
+    DISTRIBUTION = ROUND_ROBIN,
+    CLUSTERED COLUMNSTORE INDEX
+);
+
+CREATE TABLE [dbo].[Geography]
+(
+    [GeographyID] int NOT NULL,
+    [ZipCodeBKey] varchar(10) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+    [County] varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+    [City] varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+    [State] varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+    [Country] varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+    [ZipCode] varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL
+)
+WITH
+(
+    DISTRIBUTION = ROUND_ROBIN,
+    CLUSTERED COLUMNSTORE INDEX
+);
+
+CREATE TABLE [dbo].[HackneyLicense]
+(
+    [HackneyLicenseID] int NOT NULL,
+    [HackneyLicenseBKey] varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+    [HackneyLicenseCode] varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL
+)
+WITH
+(
+    DISTRIBUTION = ROUND_ROBIN,
+    CLUSTERED COLUMNSTORE INDEX
+);
+
+CREATE TABLE [dbo].[Medallion]
+(
+    [MedallionID] int NOT NULL,
+    [MedallionBKey] varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+    [MedallionCode] varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL
+)
+WITH
+(
+    DISTRIBUTION = ROUND_ROBIN,
+    CLUSTERED COLUMNSTORE INDEX
+);
+
+CREATE TABLE [dbo].[Time]
+(
+    [TimeID] int NOT NULL,
+    [TimeBKey] varchar(8) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+    [HourNumber] tinyint NOT NULL,
+    [MinuteNumber] tinyint NOT NULL,
+    [SecondNumber] tinyint NOT NULL,
+    [TimeInSecond] int NOT NULL,
+    [HourlyBucket] varchar(15) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+    [DayTimeBucketGroupKey] int NOT NULL,
+    [DayTimeBucket] varchar(100) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL
+)
+WITH
+(
+    DISTRIBUTION = ROUND_ROBIN,
+    CLUSTERED COLUMNSTORE INDEX
+);
+
+CREATE TABLE [dbo].[Trip]
+(
+    [DateID] int NOT NULL,
+    [MedallionID] int NOT NULL,
+    [HackneyLicenseID] int NOT NULL,
+    [PickupTimeID] int NOT NULL,
+    [DropoffTimeID] int NOT NULL,
+    [PickupGeographyID] int NULL,
+    [DropoffGeographyID] int NULL,
+    [PickupLatitude] float NULL,
+    [PickupLongitude] float NULL,
+    [PickupLatLong] varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+    [DropoffLatitude] float NULL,
+    [DropoffLongitude] float NULL,
+    [DropoffLatLong] varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+    [PassengerCount] int NULL,
+    [TripDurationSeconds] int NULL,
+    [TripDistanceMiles] float NULL,
+    [PaymentType] varchar(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+    [FareAmount] money NULL,
+    [SurchargeAmount] money NULL,
+    [TaxAmount] money NULL,
+    [TipAmount] money NULL,
+    [TollsAmount] money NULL,
+    [TotalAmount] money NULL
+)
+WITH
+(
+    DISTRIBUTION = ROUND_ROBIN,
+    CLUSTERED COLUMNSTORE INDEX
+);
+
+CREATE TABLE [dbo].[Weather]
+(
+    [DateID] int NOT NULL,
+    [GeographyID] int NOT NULL,
+    [PrecipitationInches] float NOT NULL,
+    [AvgTemperatureFahrenheit] float NOT NULL
+)
+WITH
+(
+    DISTRIBUTION = ROUND_ROBIN,
+    CLUSTERED COLUMNSTORE INDEX
+);
+
+4)Load the data into your data warehouse -
+.......................................................
+This section uses the COPY statement to load the sample data from Azure Storage Blob.
+a)Run the following statements to load the data:
+COPY INTO [dbo].[Date]
+FROM 'https://nytaxiblob.blob.core.windows.net/2013/Date'
+WITH
+(
+    FILE_TYPE = 'CSV',
+    FIELDTERMINATOR = ',',
+    FIELDQUOTE = ''
+)
+OPTION (LABEL = 'COPY : Load [dbo].[Date] - Taxi dataset');
+
+
+COPY INTO [dbo].[Geography]
+FROM 'https://nytaxiblob.blob.core.windows.net/2013/Geography'
+WITH
+(
+    FILE_TYPE = 'CSV',
+    FIELDTERMINATOR = ',',
+    FIELDQUOTE = ''
+)
+OPTION (LABEL = 'COPY : Load [dbo].[Geography] - Taxi dataset');
+
+COPY INTO [dbo].[HackneyLicense]
+FROM 'https://nytaxiblob.blob.core.windows.net/2013/HackneyLicense'
+WITH
+(
+    FILE_TYPE = 'CSV',
+    FIELDTERMINATOR = ',',
+    FIELDQUOTE = ''
+)
+OPTION (LABEL = 'COPY : Load [dbo].[HackneyLicense] - Taxi dataset');
+
+COPY INTO [dbo].[Medallion]
+FROM 'https://nytaxiblob.blob.core.windows.net/2013/Medallion'
+WITH
+(
+    FILE_TYPE = 'CSV',
+    FIELDTERMINATOR = ',',
+    FIELDQUOTE = ''
+)
+OPTION (LABEL = 'COPY : Load [dbo].[Medallion] - Taxi dataset');
+
+COPY INTO [dbo].[Time]
+FROM 'https://nytaxiblob.blob.core.windows.net/2013/Time'
+WITH
+(
+    FILE_TYPE = 'CSV',
+    FIELDTERMINATOR = ',',
+    FIELDQUOTE = ''
+)
+OPTION (LABEL = 'COPY : Load [dbo].[Time] - Taxi dataset');
+
+COPY INTO [dbo].[Weather]
+FROM 'https://nytaxiblob.blob.core.windows.net/2013/Weather'
+WITH
+(
+    FILE_TYPE = 'CSV',
+    FIELDTERMINATOR = ',',
+    FIELDQUOTE = '',
+    ROWTERMINATOR='0X0A'
+)
+OPTION (LABEL = 'COPY : Load [dbo].[Weather] - Taxi dataset');
+
+COPY INTO [dbo].[Trip]
+FROM 'https://nytaxiblob.blob.core.windows.net/2013/Trip2013'
+WITH
+(
+    FILE_TYPE = 'CSV',
+    FIELDTERMINATOR = '|',
+    FIELDQUOTE = '',
+    ROWTERMINATOR='0X0A',
+    COMPRESSION = 'GZIP'
+)
+OPTION (LABEL = 'COPY : Load [dbo].[Trip] - Taxi dataset');
+
+b)View your data as it loads. You're loading several GBs of data and compressing it into highly performant clustered columnstore indexes. Run the following query that uses a dynamic management views (DMVs) to show the status of the load.
+SELECT  r.[request_id]
+,       r.[status]
+,       r.resource_class
+,       r.command
+,       sum(bytes_processed) AS bytes_processed
+,       sum(rows_processed) AS rows_processed
+FROM    sys.dm_pdw_exec_requests r
+              JOIN sys.dm_pdw_dms_workers w
+                     ON r.[request_id] = w.request_id
+WHERE [label] = 'COPY : Load [dbo].[Date] - Taxi dataset' OR
+    [label] = 'COPY : Load [dbo].[Geography] - Taxi dataset' OR
+    [label] = 'COPY : Load [dbo].[HackneyLicense] - Taxi dataset' OR
+    [label] = 'COPY : Load [dbo].[Medallion] - Taxi dataset' OR
+    [label] = 'COPY : Load [dbo].[Time] - Taxi dataset' OR
+    [label] = 'COPY : Load [dbo].[Weather] - Taxi dataset' OR
+    [label] = 'COPY : Load [dbo].[Trip] - Taxi dataset'
+and session_id <> session_id() and type = 'WRITER'
+GROUP BY r.[request_id]
+,       r.[status]
+,       r.resource_class
+,       r.command;
+c)View all system queries.
+SELECT * FROM sys.dm_pdw_exec_requests;
+
+d)Enjoy your data nicely loaded into your data warehouse.
+
+5)Clean up resources-
+.........................
+You are being charged for compute resources and data that you loaded into your data warehouse. These are billed separately.
+
+If you want to keep the data in storage, you can pause compute when you aren't using the data warehouse. By pausing compute, you will only be charge for data storage and you can resume the compute whenever you're ready to work with the data.
+If you want to remove future charges, you can delete the data warehouse.
+
+Follow these steps to clean up resources as you desire.
+
+a)Sign in to the Azure portal, and select your data warehouse.
+
+b)To pause compute, select the Pause button. When the data warehouse is paused, you see a Start button. To resume compute, select Start.
+
+c)To remove the data warehouse so you won't be charged for compute or storage, select Delete.
+
+d)To remove the server you created, select mynewserver-20180430.database.windows.net in the previous image, and then select Delete. Be careful with this as deleting the server deletes all databases assigned to the server.
+
+e)To remove the resource group, select myResourceGroup, and then select Delete resource group.
+--------------------------------------------------------------------------------------------------------------------------------------------------------
+
+---------------------------------------------------------------------------------------------------------------------------------------------------------
+Azure Synapse Analytics Dedicated SQL Pool(Using Stored Procedure and Merge):  We also did other types of data verifications- (for Consistency- In Dimension table HM_card_bnpl_customer_hdr Mr. John Doe and John Doe are not the same so transforming into a consistent, standard format,In Dimension table HM_card_bnpl_trans_date converting generic timezones to Australia/ NewZealand timezone as also converting the date/ timestamp format, In Fact table HM_card_bnpl_sales converting generic currencies into Australian dollar $ and its equivalent US $, Completeness - find and replace missing values such as null, void ,placeholder values "like 999 or minus 1" with a meaningful value and Currency- In Dimension table HM_card_bnpl_cust_address , data was matched with a "change-of-address" database and updated when required).
+We also did pre-computation on joins and aggregations on data using Materialized Views.
+
+
+This transformed & prepared(gold) data in Azure Synapse Dedicated SQL Pool is used for data modelling and dashboard presentation of the batch data in PowerBI.
+
+ This type of raw data(bronze) is mainly used for data modelling and dashboard presentation of NRT data in PowerBI.
+
+There are also Micro-batches which run parallel to the main Pipeline. These are coded in Python and they extract metadata or Pipeline error log information and store them in a SQL Database from where they are stored into a file storage.
+
+
