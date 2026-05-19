@@ -1,0 +1,11 @@
+I am writing to express my interest in the [Data Engineering / Analytics] role at your organization. With 13 years of professional experience, I bring a strong track record in data engineering, analytics, and software development. Over the past 4 years, I have focused deeply on PySpark, Databricks, and Python, building scalable ETL pipelines, optimizing large data workloads, and delivering reliable analytics systems.
+
+Key strengths I offer:
+
+- 4 years of hands-on experience with PySpark for data transformation, performance tuning, and distributed processing.
+- Proven work on Databricks platforms, including Delta Lake, notebooks, job orchestration, and collaborative data engineering practices.
+- Strong Python programming skills for automation, data ingestion, API integration, and production-ready data workflows.
+- Solid SQL expertise across complex query design, database modeling, analytics reporting, and data validation.
+- Experience translating business requirements into clean, maintainable data solutions that improve efficiency and decision-making.
+
+I am excited about the opportunity to contribute to your team by applying my combination of domain knowledge, technical experience, and commitment to delivering high-quality data engineering solutions.
